@@ -1,12 +1,16 @@
 package com.example.agatepedia.ui.camera
 
+import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.*
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -14,13 +18,20 @@ import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelProvider
 import com.example.agatepedia.databinding.FragmentCameraBinding
+import permissions.dispatcher.NeedsPermission
+import permissions.dispatcher.OnShowRationale
+import permissions.dispatcher.PermissionRequest
+import permissions.dispatcher.RuntimePermissions
 import java.io.File
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import com.example.agatepedia.R
 
+@RuntimePermissions
 class CameraFragment : Fragment() {
 
     private var _binding: FragmentCameraBinding? = null
@@ -29,18 +40,8 @@ class CameraFragment : Fragment() {
     // onDestroyView.
     private val binding get() = _binding!!
 
-    private lateinit var captureBtn: Button
-    private lateinit var cameraView: PreviewView
-    private lateinit var safeContext: Context
-    private var imageCapture: ImageCapture? = null
-    private lateinit var outputDirectory: File
-    private lateinit var cameraExecutor: ExecutorService
-
-    override fun onAttach(context: Context) {
-        super.onAttach(context)
-        safeContext = context
-    }
-
+    private var lensFacing: Int = CameraSelector.LENS_FACING_BACK
+    private val executor = Executors.newSingleThreadExecutor()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -48,17 +49,83 @@ class CameraFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         (requireActivity() as AppCompatActivity).supportActionBar?.hide()
-        val dashboardViewModel =
-            ViewModelProvider(this).get(CameraViewModel::class.java)
-
         _binding = FragmentCameraBinding.inflate(inflater, container, false)
         val root: View = binding.root
-
-        val textView: TextView = binding.textDashboard
-        dashboardViewModel.text.observe(viewLifecycleOwner) {
-            textView.text = it
-        }
         return root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        binding.switchCamera.setOnClickListener{
+            lensFacing = if(lensFacing.equals(CameraSelector.LENS_FACING_BACK)) CameraSelector.LENS_FACING_FRONT
+                else CameraSelector.LENS_FACING_BACK
+
+            setupCameraWithPermissionCheck()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        setupCameraWithPermissionCheck()
+    }
+
+    @NeedsPermission(Manifest.permission.CAMERA)
+    fun setupCamera(){
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
+
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+
+//            set up view finder use case to display camera view
+            val preview = Preview.Builder()
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                .setTargetRotation(binding.viewFinder.display.rotation)
+                .build()
+                .also{ it.setSurfaceProvider(binding.viewFinder.surfaceProvider) }
+//            Set up the image analysis use case which will process frames in real time
+            val imageAnalysis = ImageAnalysis.Builder()
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                .setTargetRotation(binding.viewFinder.display.rotation)
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                .build()
+
+//            Create a new camera selector each time, enforcing lens facing
+            val cameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
+
+//            Apply declared configs to CameraX using the same lifecycle owner
+            try{
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(requireActivity() as LifecycleOwner, cameraSelector, preview, imageAnalysis)
+            }catch(e: Exception){
+                Log.e(TAG, "Camera Fail", e)
+            }
+        }, ContextCompat.getMainExecutor(requireContext()))
+    }
+
+    @OnShowRationale(Manifest.permission.CAMERA)
+    fun showRationaleForCamera(request: PermissionRequest){
+        showDialog(R.string.message_permission_camera, request)
+    }
+
+    private fun showDialog(@StringRes messageResId: Int, request: PermissionRequest){
+        AlertDialog.Builder(requireContext())
+            .setPositiveButton(R.string.button_allow) { _, _ -> request.proceed() }
+            .setNegativeButton(R.string.button_deny) { _, _ -> request.cancel() }
+            .setCancelable(false)
+            .setMessage(messageResId)
+            .show()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+//        delegate the permission handling to generated function
+        onRequestPermissionsResult(requestCode, grantResults)
     }
 
     override fun onDestroyView() {
@@ -66,37 +133,7 @@ class CameraFragment : Fragment() {
         _binding = null
     }
 
-//    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-//        super.onViewCreated(view, savedInstanceState)
-//
-//        captureBtn= view.findViewById(R.id.camera_capture_button)
-//        cameraView= view.findViewById(R.id.viewFinder)
-//
-//        // Request camera permissions
-//        if (allPermissionsGranted()) {
-//            startCamera()
-//        } else {
-//            ActivityCompat.requestPermissions(
-//                view.context as Activity, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
-//        }
-//
-//        // Set up the listener for take photo button
-//        captureBtn.setOnClickListener {
-//            takePhoto()
-//            /*val i = Intent(this, ImagePreview::class.java)
-//            i.putExtra("photo", )*/
-//        }
-//
-//        outputDirectory = getOutputDirectory()
-//
-//        cameraExecutor = Executors.newSingleThreadExecutor()
-//    }
-//
-//    companion object {
-//        fun newInstance() = CameraFragment()
-//        private const val TAG = "CameraXBasic"
-//        private const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
-//        private const val REQUEST_CODE_PERMISSIONS = 10
-//        private val REQUIRED_PERMISSIONS = arrayOf(android.Manifest.permission.CAMERA)
-//    }
+    companion object{
+        private val TAG = "camera"
+    }
 }

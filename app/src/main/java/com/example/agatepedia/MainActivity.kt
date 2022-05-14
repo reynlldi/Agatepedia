@@ -10,6 +10,7 @@ import androidx.navigation.ui.setupWithNavController
 import com.example.agatepedia.databinding.ActivityMainBinding
 
 
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
