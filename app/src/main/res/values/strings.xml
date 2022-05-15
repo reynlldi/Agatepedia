@@ -9,4 +9,5 @@
     <string name="button_allow">yes</string>
     <string name="button_deny">no</string>
     <string name="message_permission_camera">We need your camera permission to analyze the agate</string>
+    <string name="denied_permission_camera">camera permission not granted</string>
 </resources>

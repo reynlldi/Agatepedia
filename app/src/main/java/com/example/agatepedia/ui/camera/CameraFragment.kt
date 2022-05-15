@@ -21,15 +21,12 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelProvider
 import com.example.agatepedia.databinding.FragmentCameraBinding
-import permissions.dispatcher.NeedsPermission
-import permissions.dispatcher.OnShowRationale
-import permissions.dispatcher.PermissionRequest
-import permissions.dispatcher.RuntimePermissions
 import java.io.File
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import com.example.agatepedia.R
+import permissions.dispatcher.*
 
 @RuntimePermissions
 class CameraFragment : Fragment() {
@@ -107,6 +104,12 @@ class CameraFragment : Fragment() {
     @OnShowRationale(Manifest.permission.CAMERA)
     fun showRationaleForCamera(request: PermissionRequest){
         showDialog(R.string.message_permission_camera, request)
+    }
+
+    @OnPermissionDenied(Manifest.permission.CAMERA)
+    fun permissionCameraDenied(){
+        Toast.makeText(requireContext(), getString(R.string.denied_permission_camera), Toast.LENGTH_SHORT).show()
+        requireActivity().onBackPressed()
     }
 
     private fun showDialog(@StringRes messageResId: Int, request: PermissionRequest){
